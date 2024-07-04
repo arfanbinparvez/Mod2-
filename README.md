@@ -23,9 +23,9 @@ export default function HomePage() {
   const [account, setAccount] = useState(undefined);
   const [atm, setATM] = useState(undefined);
   const [balance, setBalance] = useState(undefined);
-  const [lastWithdrawalTime, setLastWithdrawalTime] = useState(0); 
+  const [lastWithdrawalTime, setLastWithdrawalTime] = useState(0);
   const [lastDepositTime, setLastDepositTime] = useState(0);
-  const [transferAddress, setTransferAddress] = useState("");
+  const [paused, setPaused] = useState(false);
 
   const contractAddress = "0x5FbDB2315678afecb367f032d93F642f64180aa3";
   const atmABI = atm_abi.abi;
@@ -77,7 +77,7 @@ export default function HomePage() {
   };
 
   const deposit = async () => {
-    if (atm) {
+    if (atm && !paused) {
       try {
         let tx = await atm.deposit(1);
         await tx.wait();
@@ -93,7 +93,7 @@ export default function HomePage() {
   };
 
   const withdraw = async () => {
-    if (atm) {
+    if (atm && !paused) {
       const currentTime = Math.floor(Date.now() / 1000); // Get current time in seconds
 
       // Check if enough time has passed since last withdrawal (24 hours in this example)
@@ -115,11 +115,42 @@ export default function HomePage() {
     }
   };
 
-  const transferETH = async () => {
-    if (atm && transferAddress) {
-      let tx = await atm.transfer(transferAddress, 1);
-      await tx.wait();
-      getBalance();
+  const pauseContract = async () => {
+    if (atm) {
+      try {
+        let tx = await atm.pauseContract();
+        await tx.wait();
+        setPaused(true);
+      } catch (error) {
+        console.error("Error pausing contract:", error);
+      }
+    }
+  };
+
+  const resumeContract = async () => {
+    if (atm) {
+      try {
+        let tx = await atm.resumeContract();
+        await tx.wait();
+        setPaused(false);
+      } catch (error) {
+        console.error("Error resuming contract:", error);
+      }
+    }
+  };
+
+  const disconnectWallet = async () => {
+    if (atm) {
+      try {
+        let tx = await atm.disconnectWallet();
+        await tx.wait();
+        setAccount(undefined);
+        setBalance(undefined);
+        setLastWithdrawalTime(0);
+        setLastDepositTime(0);
+      } catch (error) {
+        console.error("Error disconnecting wallet:", error);
+      }
     }
   };
 
@@ -154,18 +185,14 @@ export default function HomePage() {
           Last Deposit Time:{" "}
           {new Date(lastDepositTime * 1000).toLocaleString()}
         </p>
-        <button onClick={deposit}>Deposit 1 ETH</button>
-        <button onClick={withdraw}>Withdraw 1 ETH</button>
+        <p>Contract Paused: {paused ? "Yes" : "No"}</p>
+        <button onClick={deposit} disabled={paused}>Deposit 1 ETH</button>
+        <button onClick={withdraw} disabled={paused}>Withdraw 1 ETH</button>
         <br />
         <br />
-        <b>Transfer ETH</b>
-        <input
-          type="text"
-          placeholder="Recipient Address"
-          value={transferAddress}
-          onChange={(e) => setTransferAddress(e.target.value)}
-        />
-        <button onClick={transferETH}>Transfer 1 ETH</button>
+        <button onClick={pauseContract}>Pause Contract</button>
+        <button onClick={resumeContract}>Resume Contract</button>
+        <button onClick={disconnectWallet}>Disconnect Wallet</button>
       </div>
     );
   };
@@ -198,6 +225,7 @@ export default function HomePage() {
     </main>
   );
 }
+
 ```
 ## Smart Contract (Solidity)
 ### Assessment.sol
@@ -211,25 +239,35 @@ contract Assessment {
     uint256 public balance;
     uint256 public lastWithdrawTime;
     uint256 public lastDepositTime;
+    bool public paused = false;
 
     event Deposit(uint256 amount);
     event Withdraw(uint256 amount);
-    event Transfer(address indexed from, address indexed to, uint256 amount);
+    event Paused(bool isPaused);
+    event Terminated(address terminatedBy);
+    event OwnerUpdated(address newOwner);
 
     constructor(uint initBalance) payable {
         owner = payable(msg.sender);
         balance = initBalance;
     }
 
+    modifier onlyOwner() {
+        require(msg.sender == owner, "You are not the owner of this account");
+        _;
+    }
+
+    modifier whenNotPaused() {
+        require(!paused, "Contract is paused");
+        _;
+    }
+
     function getBalance() public view returns (uint256) {
         return balance;
     }
 
-    function deposit(uint256 _amount) public payable {
+    function deposit(uint256 _amount) public payable onlyOwner whenNotPaused {
         uint256 _previousBalance = balance;
-
-        // Ensure this is the owner
-        require(msg.sender == owner, "You are not the owner of this account");
 
         // Perform transaction
         balance += _amount;
@@ -247,8 +285,7 @@ contract Assessment {
     // Custom error
     error InsufficientBalance(uint256 balance, uint256 withdrawAmount);
 
-    function withdraw(uint256 _withdrawAmount) public {
-        require(msg.sender == owner, "You are not the owner of this account");
+    function withdraw(uint256 _withdrawAmount) public onlyOwner whenNotPaused {
         uint256 _previousBalance = balance;
         if (balance < _withdrawAmount) {
             revert InsufficientBalance({
@@ -270,31 +307,6 @@ contract Assessment {
         emit Withdraw(_withdrawAmount);
     }
 
-    function transfer(address payable _to, uint256 _amount) public {
-        require(msg.sender == owner, "You are not the owner of this account");
-        require(_to != address(0), "Transfer to the zero address");
-
-        uint256 _previousBalance = balance;
-
-        // Check balance
-        if (balance < _amount) {
-            revert InsufficientBalance({
-                balance: balance,
-                withdrawAmount: _amount
-            });
-        }
-
-        // Transfer the amount
-        balance -= _amount;
-        _to.transfer(_amount);
-
-        // Emit the event
-        emit Transfer(msg.sender, _to, _amount);
-
-        // Assert the balance is correct
-        assert(balance == _previousBalance - _amount);
-    }
-    
     function getLastWithdrawTime() public view returns (uint256) {
         return lastWithdrawTime;
     }
@@ -302,7 +314,34 @@ contract Assessment {
     function getLastDepositTime() public view returns (uint256) {
         return lastDepositTime;
     }
+
+    function updateOwner(address payable newOwner) public onlyOwner {
+        require(newOwner != address(0), "New owner cannot be the zero address");
+        owner = newOwner;
+        emit OwnerUpdated(newOwner);
+    }
+
+    function disconnectWallet() public onlyOwner {
+        owner = payable(address(0));
+        emit OwnerUpdated(address(0));
+    }
+
+    function pauseContract() public onlyOwner {
+        paused = true;
+        emit Paused(true);
+    }
+
+    function resumeContract() public onlyOwner {
+        paused = false;
+        emit Paused(false);
+    }
+
+    function terminateContract() public onlyOwner {
+        emit Terminated(owner);
+        selfdestruct(owner);
+    }
 }
+
 
 ```
 
