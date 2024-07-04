@@ -209,12 +209,14 @@ pragma solidity ^0.8.9;
 contract Assessment {
     address payable public owner;
     uint256 public balance;
+    uint256 public lastWithdrawTime;
+    uint256 public lastDepositTime;
 
     event Deposit(uint256 amount);
     event Withdraw(uint256 amount);
     event Transfer(address indexed from, address indexed to, uint256 amount);
 
-    constructor(uint256 initBalance) payable {
+    constructor(uint initBalance) payable {
         owner = payable(msg.sender);
         balance = initBalance;
     }
@@ -231,6 +233,9 @@ contract Assessment {
 
         // Perform transaction
         balance += _amount;
+
+        // Update the last deposit time
+        lastDepositTime = block.timestamp;
 
         // Assert transaction completed successfully
         assert(balance == _previousBalance + _amount);
@@ -254,6 +259,9 @@ contract Assessment {
 
         // Withdraw the given amount
         balance -= _withdrawAmount;
+
+        // Update the last withdraw time
+        lastWithdrawTime = block.timestamp;
 
         // Assert the balance is correct
         assert(balance == _previousBalance - _withdrawAmount);
@@ -286,7 +294,16 @@ contract Assessment {
         // Assert the balance is correct
         assert(balance == _previousBalance - _amount);
     }
+    
+    function getLastWithdrawTime() public view returns (uint256) {
+        return lastWithdrawTime;
+    }
+
+    function getLastDepositTime() public view returns (uint256) {
+        return lastDepositTime;
+    }
 }
+
 ```
 
 
