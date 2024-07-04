@@ -6,25 +6,35 @@ contract Assessment {
     uint256 public balance;
     uint256 public lastWithdrawTime;
     uint256 public lastDepositTime;
+    bool public paused = false;
 
     event Deposit(uint256 amount);
     event Withdraw(uint256 amount);
-    event Transfer(address indexed from, address indexed to, uint256 amount);
+    event Paused(bool isPaused);
+    event Terminated(address terminatedBy);
+    event OwnerUpdated(address newOwner);
 
     constructor(uint initBalance) payable {
         owner = payable(msg.sender);
         balance = initBalance;
     }
 
+    modifier onlyOwner() {
+        require(msg.sender == owner, "You are not the owner of this account");
+        _;
+    }
+
+    modifier whenNotPaused() {
+        require(!paused, "Contract is paused");
+        _;
+    }
+
     function getBalance() public view returns (uint256) {
         return balance;
     }
 
-    function deposit(uint256 _amount) public payable {
+    function deposit(uint256 _amount) public payable onlyOwner whenNotPaused {
         uint256 _previousBalance = balance;
-
-        // Ensure this is the owner
-        require(msg.sender == owner, "You are not the owner of this account");
 
         // Perform transaction
         balance += _amount;
@@ -42,8 +52,7 @@ contract Assessment {
     // Custom error
     error InsufficientBalance(uint256 balance, uint256 withdrawAmount);
 
-    function withdraw(uint256 _withdrawAmount) public {
-        require(msg.sender == owner, "You are not the owner of this account");
+    function withdraw(uint256 _withdrawAmount) public onlyOwner whenNotPaused {
         uint256 _previousBalance = balance;
         if (balance < _withdrawAmount) {
             revert InsufficientBalance({
@@ -65,36 +74,37 @@ contract Assessment {
         emit Withdraw(_withdrawAmount);
     }
 
-    function transfer(address payable _to, uint256 _amount) public {
-        require(msg.sender == owner, "You are not the owner of this account");
-        require(_to != address(0), "Transfer to the zero address");
-
-        uint256 _previousBalance = balance;
-
-        // Check balance
-        if (balance < _amount) {
-            revert InsufficientBalance({
-                balance: balance,
-                withdrawAmount: _amount
-            });
-        }
-
-        // Transfer the amount
-        balance -= _amount;
-        _to.transfer(_amount);
-
-        // Emit the event
-        emit Transfer(msg.sender, _to, _amount);
-
-        // Assert the balance is correct
-        assert(balance == _previousBalance - _amount);
-    }
-    
     function getLastWithdrawTime() public view returns (uint256) {
         return lastWithdrawTime;
     }
 
     function getLastDepositTime() public view returns (uint256) {
         return lastDepositTime;
+    }
+
+    function updateOwner(address payable newOwner) public onlyOwner {
+        require(newOwner != address(0), "New owner cannot be the zero address");
+        owner = newOwner;
+        emit OwnerUpdated(newOwner);
+    }
+
+    function disconnectWallet() public onlyOwner {
+        owner = payable(address(0));
+        emit OwnerUpdated(address(0));
+    }
+
+    function pauseContract() public onlyOwner {
+        paused = true;
+        emit Paused(true);
+    }
+
+    function resumeContract() public onlyOwner {
+        paused = false;
+        emit Paused(false);
+    }
+
+    function terminateContract() public onlyOwner {
+        emit Terminated(owner);
+        selfdestruct(owner);
     }
 }
