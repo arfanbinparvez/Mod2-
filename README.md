@@ -8,8 +8,7 @@ Welcome to  Ethereum ATM, a decentralized application (dApp) where users can int
 - **Connect with MetaMask**: Users can connect their MetaMask wallet to interact with the Ethereum network.
 - **Deposit and Withdraw ETH**: Users can deposit and withdraw 1 ETH at a time.
 - **Transfer ETH**: Users can transfer 1 ETH to another Ethereum address.
-- **View Account Details**: Displays account information including balance, last withdrawal, and last deposit times.
-
+## New Functions included are last deposit time, last withdrawal time and transfer.
 ## Frontend (React)
 
 ### HomePage.js
@@ -24,7 +23,7 @@ export default function HomePage() {
   const [account, setAccount] = useState(undefined);
   const [atm, setATM] = useState(undefined);
   const [balance, setBalance] = useState(undefined);
-  const [lastWithdrawalTime, setLastWithdrawalTime] = useState(0);
+  const [lastWithdrawalTime, setLastWithdrawalTime] = useState(0); 
   const [lastDepositTime, setLastDepositTime] = useState(0);
   const [transferAddress, setTransferAddress] = useState("");
 
