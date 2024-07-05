@@ -80,12 +80,6 @@ export default function HomePage() {
     if (atm && !paused) {
       const currentTime = Math.floor(Date.now() / 1000); // Get current time in seconds
 
-      // Check if enough time has passed since last withdrawal (24 hours in this example)
-      if (currentTime - lastWithdrawalTime < 24 * 60 * 60) {
-        alert("Please wait 24 hours between withdrawals.");
-        return;
-      }
-
       try {
         let tx = await atm.withdraw(1);
         await tx.wait();
