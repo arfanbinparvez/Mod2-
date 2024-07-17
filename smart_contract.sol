@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.9;
 
-contract Assessment {
+contract smart_contract {
     address payable public owner;
     uint256 public balance;
     uint256 public lastWithdrawTime;
